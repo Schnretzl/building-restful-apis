@@ -10,13 +10,27 @@ ma = Marshmallow(app)
 
 class MemberSchema(ma.Schema):
     name = fields.String(required=True)
-    age = fields.String(required=True)
+    age = fields.Int(required=True)
     
     class Meta:
         fields = ('name', 'age', 'id')
         
+class WorkoutSchema(ma.Schema):
+    member_id = fields.Int(required=True)
+    session_date = fields.Date()
+    session_time = fields.String()
+    activity = fields.String()
+    duration_minutes = fields.Int()
+    calories_burned = fields.Int()
+    
+    class Meta:
+        fields = ('session_id', 'member_id', 'session_date', 'session_time', 'activity', 'duration_minutes', 'calories_burned')
+        
 member_schema = MemberSchema()
 members_schema = MemberSchema(many=True)
+
+workout_schema = WorkoutSchema()
+workouts_schema = WorkoutSchema(many=True)
 
 # Task 1: Setting Up the Flask Environment and Database Connection
 def get_db_connection():
@@ -192,6 +206,128 @@ def delete_member(id):
         if conn and conn.is_connected():
             cursor.close()
             conn.close()
+            
+# --------------------------------------------------------------------------------
+# Task 3: Managing Workout Sessions
+@app.route('/workoutsessions', methods=['GET'])
+def get_all_workout_sessions():
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+        cursor = conn.cursor(dictionary=True)
+        
+        query = "SELECT * FROM workoutsessions"
+        
+        cursor.execute(query)
+        
+        workouts = cursor.fetchall()
+        
+        return workouts_schema.jsonify(workouts)
+    
+    except Error as e:
+        print("Error: {e}")
+        return jsonify({"Error": "Internal Server Error"}), 500
+    
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+            
+# --------------------------------------------------------------------------------
+
+@app.route('/workoutsessions/<int:id>', methods=['GET'])
+def get_all_workouts_for_member(id):
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Database connection failed"}), 500
+        cursor = conn.cursor(dictionary=True)
+        
+        query = "SELECT * FROM workoutsessions WHERE member_id = %s"
+        
+        cursor.execute(query, (id,))
+        
+        workouts = cursor.fetchall()
+        
+        return workouts_schema.jsonify(workouts)
+    
+    except Error as e:
+        print("Error: {e}")
+        return jsonify({"Error": "Internal Server Error"}), 500
+    
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+            
+# --------------------------------------------------------------------------------
+
+@app.route('/workoutsessions', methods=['POST'])
+def schedule_workout():
+    try:
+        workout_data = workout_schema.load(request.json)
+    except ValidationError as e:
+        print(f"Error: {e}")
+        return jsonify(e.messages), 400
+    
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Internal Server Error"}), 500
+        cursor = conn.cursor(dictionary=True)
+        
+        new_workout = (workout_data['member_id'], workout_data['session_date'], workout_data['session_time'], workout_data['activity'], workout_data['duration_minutes'], workout_data['calories_burned'])
+        
+        query = "INSERT INTO workoutsessions (member_id, session_date, session_time, activity, duration_minutes, calories_burned) VALUES (%s, %s, %s, %s, %s, %s)"
+        
+        cursor.execute(query, new_workout)
+        conn.commit()
+        
+        return jsonify({"message": "Workout scheduled successfully"}), 201
+    
+    except Error as e:
+        print(f"Error: {e}")
+        return jsonify({"error": "Internal Server Error"}), 500
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+
+# --------------------------------------------------------------------------------
+
+@app.route('/workoutsessions/<int:id>', methods=['PUT'])
+def update_workout(id):
+    try:
+        workout_data = workout_schema.load(request.json)
+    except ValidationError as e:
+        print(f"Error: {e}")
+        return jsonify(e.messages), 400
+    
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({"error": "Internal Server Error"}), 500
+        cursor = conn.cursor(dictionary=True)
+        
+        updated_workout = (workout_data['session_date'], workout_data['session_time'], workout_data['activity'], workout_data['duration_minutes'], workout_data['calories_burned'], id)
+        
+        query = "UPDATE workoutsessions SET session_date=%s, session_time=%s, activity=%s, duration_minutes=%s, calories_burned=%s WHERE session_id=%s"
+        
+        cursor.execute(query, updated_workout)
+        conn.commit()
+        
+        return jsonify({"message": "Updated workout successfully"}), 200
+    
+    except Error as e:
+        print(f"Error: {e}")
+        return jsonify({"error": "Internal Server Error"}), 500
+    finally:
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
+            
+# --------------------------------------------------------------------------------
 
 if __name__ == "__main__":
     app.run(debug=True)
